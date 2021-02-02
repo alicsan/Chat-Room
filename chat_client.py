@@ -1,23 +1,53 @@
 import socket
-import time
+import select 
+import errno
 import sys
 
-socket_server = socket.socket()
-server_host = socket.gethostname()
-ip = socket.gethostbyname(server_host)
-port = 1234
+HEADER_LENGTH= 10
 
-print("This is your IP address: "+ip)
-server_host = input("Enter friend's IP address: ")
-name = input("Enter friend's name: ")
+host_name = socket.gethostname()
+IP = socket.gethostbyname(host_name)
+PORT = 1234
 
-socket_server.connect((server_host,port))
-server_name = socket_server.recv(1024)
-server_name = server_name.decode()
+my_username = input ("Username: ")
+client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+client_socket.connect((IP,PORT))
+client_socket.setblocking(False)
 
-print(server_name + " has joined...")
+username = my_username.encode()
+username_header = f"{len(username):<{HEADER_LENGTH}}".encode()
+client_socket.send(username_header + username)
+
 while True:
-    message = (socket_server.recv(1024)).decode()
-    print(server_name,":",message)
-    message = input("Me: ")
-    socket_server.send(message.encode())
+    message = input(f"{my_username} > ")
+
+    if message:
+        message = message.encode()
+        message_header=f"{len(message):<{HEADER_LENGTH}}".encode()
+        client_socket.send(message_header + message)
+
+    try:
+        #try to recieve things
+        while True:
+            username_header = client_socket.recv(HEADER_LENGTH)
+            if not len(username_header):
+                print("Connection lost by the server.")
+                sys.exit()
+            username_length = int(username_header.decode().strip())
+            username = client_socket.recv(username_length).decode()
+
+            message_header = client_socket.recv(HEADER_LENGTH)
+            message_length = int(message_header.decode().strip())
+            message = client_socket.recv(message_length).decode()
+
+            print(f"{username} > {message} ")
+        
+    except IOError as e:
+        if e.errno != errno.EAGAIN and e.errno != errno.EWOULDBLOCK:
+            print('Reading error', str(e))
+            sys.exit()
+            continue
+
+    except Exception as e:
+        print('General error', str(e))
+        sys.exit()
